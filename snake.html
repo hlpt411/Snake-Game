@@ -1,0 +1,613 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>🐍 Snake — Huyền Thoại</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          mono: ['"JetBrains Mono"', 'monospace'],
+          display: ['"Space Grotesk"', 'sans-serif'],
+        },
+        colors: {
+          ink: { 900: '#0b0e17', 800: '#11151f', 700: '#1a2030' },
+          neon: { green: '#74db81', red: '#e85c6a', gold: '#facc15', cyan: '#22d3ee' },
+        },
+        boxShadow: {
+          glow: '0 0 40px rgba(116,219,129,0.35), 0 0 80px rgba(116,219,129,0.15)',
+          redglow: '0 0 40px rgba(232,92,106,0.45)',
+        },
+      },
+    },
+  };
+</script>
+<style>
+  html, body { height: 100%; overscroll-behavior: none; }
+  body {
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(116,219,129,0.10), transparent 60%),
+      radial-gradient(900px 500px at -10% 110%, rgba(34,211,238,0.08), transparent 60%),
+      linear-gradient(180deg, #0b0e17 0%, #0e1320 100%);
+    -webkit-tap-highlight-color: transparent;
+  }
+  canvas { display: block; touch-action: none; }
+  .grid-bg {
+    background-image:
+      linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.035) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+  .btn {
+    transition: transform .08s ease, box-shadow .2s ease, background-color .2s ease;
+  }
+  .btn:active { transform: translateY(1px) scale(0.98); }
+  .pulse-dot {
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%,100% { opacity: 1; transform: scale(1); }
+    50% { opacity: .5; transform: scale(0.85); }
+  }
+  .float-in { animation: floatIn .35s cubic-bezier(.2,.8,.2,1) both; }
+  @keyframes floatIn {
+    from { opacity: 0; transform: translateY(8px) scale(.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .dpad-btn {
+    background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+  .dpad-btn:active { background: rgba(116,219,129,0.18); border-color: rgba(116,219,129,0.5); }
+</style>
+</head>
+<body class="font-mono text-slate-200 min-h-screen flex flex-col items-center justify-center p-3 select-none">
+
+  <div class="w-full max-w-[680px]">
+
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-3 px-1">
+      <div class="flex items-center gap-2">
+        <span class="text-2xl">🐍</span>
+        <h1 class="font-display font-extrabold text-xl sm:text-2xl tracking-tight bg-gradient-to-r from-neon-green to-neon-cyan bg-clip-text text-transparent">
+          SNAKE
+        </h1>
+        <span class="hidden sm:inline text-xs text-slate-500">// huyền thoại</span>
+      </div>
+      <div class="flex items-center gap-2 text-xs text-slate-400">
+        <span class="pulse-dot inline-block w-2 h-2 rounded-full bg-neon-green"></span>
+        <span id="statusText">SẴN SÀNG</span>
+      </div>
+    </div>
+
+    <!-- HUD -->
+    <div class="grid grid-cols-3 gap-2 mb-2">
+      <div class="rounded-xl bg-ink-800/80 border border-white/5 px-3 py-2 backdrop-blur">
+        <div class="text-[10px] uppercase tracking-widest text-slate-500">Điểm</div>
+        <div id="score" class="text-2xl font-extrabold text-neon-green leading-tight">0</div>
+      </div>
+      <div class="rounded-xl bg-ink-800/80 border border-white/5 px-3 py-2 backdrop-blur">
+        <div class="text-[10px] uppercase tracking-widest text-slate-500">Kỷ lục</div>
+        <div id="best" class="text-2xl font-extrabold text-neon-gold leading-tight">0</div>
+      </div>
+      <div class="rounded-xl bg-ink-800/80 border border-white/5 px-3 py-2 backdrop-blur">
+        <div class="text-[10px] uppercase tracking-widest text-slate-500">Tốc độ</div>
+        <div id="speed" class="text-2xl font-extrabold text-neon-cyan leading-tight">1.0×</div>
+      </div>
+    </div>
+
+    <!-- Game board -->
+    <div class="relative rounded-2xl overflow-hidden border border-white/10 shadow-glow bg-ink-900">
+      <canvas id="game" width="672" height="576" class="w-full h-auto block grid-bg"></canvas>
+
+      <!-- Overlay -->
+      <div id="overlay" class="absolute inset-0 flex flex-col items-center justify-center text-center p-6 bg-ink-900/80 backdrop-blur-sm">
+        <div class="float-in">
+          <div id="overlayTitle" class="font-display font-extrabold text-4xl sm:text-5xl mb-2 bg-gradient-to-r from-neon-green to-neon-cyan bg-clip-text text-transparent">
+            SẴN SÀNG?
+          </div>
+          <div id="overlaySub" class="text-slate-400 text-sm sm:text-base mb-5">
+            Dùng phím mũi tên hoặc WASD · Space để tạm dừng
+          </div>
+          <button id="startBtn" class="btn px-6 py-3 rounded-xl bg-neon-green text-ink-900 font-bold text-base hover:brightness-110 shadow-glow">
+            ▶ Bắt đầu
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Controls row -->
+    <div class="flex items-center justify-between mt-3 gap-2">
+      <div class="text-[11px] text-slate-500 hidden sm:block">
+        <kbd class="px-1.5 py-0.5 rounded bg-white/5 border border-white/10">↑↓←→</kbd>
+        /
+        <kbd class="px-1.5 py-0.5 rounded bg-white/5 border border-white/10">WASD</kbd>
+        di chuyển ·
+        <kbd class="px-1.5 py-0.5 rounded bg-white/5 border border-white/10">Space</kbd>
+        tạm dừng ·
+        <kbd class="px-1.5 py-0.5 rounded bg-white/5 border border-white/10">R</kbd>
+        chơi lại
+      </div>
+      <div class="flex gap-2 ml-auto">
+        <button id="soundBtn" class="btn px-3 py-2 rounded-lg bg-ink-800 border border-white/10 text-slate-300 hover:bg-ink-700 text-sm" title="Bật/tắt âm thanh">
+          🔊
+        </button>
+        <button id="pauseBtn" class="btn px-3 py-2 rounded-lg bg-ink-800 border border-white/10 text-slate-300 hover:bg-ink-700 text-sm">
+          ⏸ Tạm dừng
+        </button>
+        <button id="restartBtn" class="btn px-3 py-2 rounded-lg bg-neon-red/90 border border-neon-red/50 text-white hover:brightness-110 text-sm">
+          ↻ Chơi lại
+        </button>
+      </div>
+    </div>
+
+    <!-- Mobile D-pad -->
+    <div class="sm:hidden mt-4 flex justify-center">
+      <div class="grid grid-cols-3 gap-2 w-44">
+        <div></div>
+        <button data-dir="up" class="dpad-btn btn rounded-xl h-14 text-2xl text-slate-200">▲</button>
+        <div></div>
+        <button data-dir="left" class="dpad-btn btn rounded-xl h-14 text-2xl text-slate-200">◀</button>
+        <button data-dir="down" class="dpad-btn btn rounded-xl h-14 text-2xl text-slate-200">▼</button>
+        <button data-dir="right" class="dpad-btn btn rounded-xl h-14 text-2xl text-slate-200">▶</button>
+      </div>
+    </div>
+
+  </div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ---------- Cấu hình ----------
+  const CELL = 24;
+  const COLS = 28;
+  const ROWS = 24;
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  canvas.width = COLS * CELL;
+  canvas.height = ROWS * CELL;
+
+  const START_SPEED = 9;        // số bước/giây
+  const MAX_SPEED = 22;
+  const SPEED_STEP = 0.35;
+
+  const COLORS = {
+    head: '#74db81',
+    body: '#48bb78',
+    tail: '#2e8860',
+    eye: '#0b1a12',
+    food: '#e85c6a',
+    foodCore: '#ffd1d6',
+  };
+
+  // ---------- DOM ----------
+  const scoreEl = document.getElementById('score');
+  const bestEl = document.getElementById('best');
+  const speedEl = document.getElementById('speed');
+  const overlay = document.getElementById('overlay');
+  const overlayTitle = document.getElementById('overlayTitle');
+  const overlaySub = document.getElementById('overlaySub');
+  const startBtn = document.getElementById('startBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
+  const restartBtn = document.getElementById('restartBtn');
+  const soundBtn = document.getElementById('soundBtn');
+  const statusText = document.getElementById('statusText');
+
+  // ---------- Trạng thái ----------
+  let snake, dir, nextDir, food, score, best, speed, alive, paused, started;
+  let stepAcc = 0;
+  let lastTime = 0;
+  let particles = [];
+  let foodPulse = 0;
+  let eatFlash = 0;
+  let soundOn = true;
+
+  best = parseInt(localStorage.getItem('snake_best') || '0', 10);
+  bestEl.textContent = best;
+
+  // ---------- Âm thanh (Web Audio, không cần file) ----------
+  let audioCtx = null;
+  function ensureAudio() {
+    if (!audioCtx) {
+      try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+      catch (e) { audioCtx = null; }
+    }
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  }
+  function beep(freq = 600, dur = 0.08, type = 'sine', vol = 0.06) {
+    if (!soundOn) return;
+    ensureAudio();
+    if (!audioCtx) return;
+    const o = audioCtx.createOscillator();
+    const g = audioCtx.createGain();
+    o.type = type;
+    o.frequency.value = freq;
+    g.gain.setValueAtTime(vol, audioCtx.currentTime);
+    g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + dur);
+    o.connect(g).connect(audioCtx.destination);
+    o.start();
+    o.stop(audioCtx.currentTime + dur);
+  }
+  const sfx = {
+    eat() { beep(720, 0.07, 'square', 0.05); setTimeout(() => beep(960, 0.06, 'square', 0.04), 40); },
+    die() { beep(180, 0.25, 'sawtooth', 0.08); setTimeout(() => beep(90, 0.3, 'sawtooth', 0.07), 120); },
+    turn() { beep(420, 0.02, 'sine', 0.02); },
+    start() { beep(520, 0.06, 'triangle', 0.05); setTimeout(() => beep(780, 0.08, 'triangle', 0.05), 70); },
+  };
+
+  // ---------- Khởi tạo lại game ----------
+  function reset() {
+    const cx = Math.floor(COLS / 2);
+    const cy = Math.floor(ROWS / 2);
+    snake = [{ x: cx, y: cy }, { x: cx - 1, y: cy }, { x: cx - 2, y: cy }];
+    dir = { x: 1, y: 0 };
+    nextDir = { x: 1, y: 0 };
+    score = 0;
+    speed = START_SPEED;
+    alive = true;
+    paused = false;
+    particles = [];
+    foodPulse = 0;
+    eatFlash = 0;
+    food = spawnFood();
+    updateHUD();
+  }
+
+  function spawnFood() {
+    const occupied = new Set(snake.map(s => s.x + ',' + s.y));
+    const empty = [];
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        if (!occupied.has(x + ',' + y)) empty.push({ x, y });
+      }
+    }
+    if (empty.length === 0) return null;
+    return empty[Math.floor(Math.random() * empty.length)];
+  }
+
+  function updateHUD() {
+    scoreEl.textContent = score;
+    bestEl.textContent = best;
+    speedEl.textContent = (speed / START_SPEED).toFixed(1) + '×';
+  }
+
+  // ---------- Điều khiển ----------
+  function setDir(nx, ny) {
+    // không cho đảo ngược tức thì
+    if (nx === -dir.x && ny === -dir.y) return;
+    if (nx === nextDir.x && ny === nextDir.y) return;
+    nextDir = { x: nx, y: ny };
+    sfx.turn();
+  }
+
+  const keyMap = {
+    ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0],
+    w: [0, -1], s: [0, 1], a: [-1, 0], d: [1, 0],
+    W: [0, -1], S: [0, 1], A: [-1, 0], D: [1, 0],
+  };
+
+  window.addEventListener('keydown', (e) => {
+    if (keyMap[e.key]) {
+      e.preventDefault();
+      if (!started) beginGame();
+      if (alive && !paused) setDir(...keyMap[e.key]);
+    } else if (e.key === ' ') {
+      e.preventDefault();
+      if (started && alive) togglePause();
+      else if (!started) beginGame();
+    } else if (e.key === 'r' || e.key === 'R') {
+      beginGame();
+    }
+  });
+
+  document.querySelectorAll('[data-dir]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!started) beginGame();
+      const map = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+      if (alive && !paused) setDir(...map[btn.dataset.dir]);
+    });
+  });
+
+  // Vuốt trên mobile
+  let touchStart = null;
+  canvas.addEventListener('touchstart', (e) => {
+    const t = e.changedTouches[0];
+    touchStart = { x: t.clientX, y: t.clientY };
+    if (!started) beginGame();
+  }, { passive: true });
+  canvas.addEventListener('touchend', (e) => {
+    if (!touchStart) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchStart.x;
+    const dy = t.clientY - touchStart.y;
+    if (Math.abs(dx) < 20 && Math.abs(dy) < 20) return;
+    if (Math.abs(dx) > Math.abs(dy)) setDir(dx > 0 ? 1 : -1, 0);
+    else setDir(0, dy > 0 ? 1 : -1);
+    touchStart = null;
+  }, { passive: true });
+
+  // ---------- Vòng lặp game ----------
+  function step() {
+    dir = nextDir;
+    const head = snake[0];
+    const nx = head.x + dir.x;
+    const ny = head.y + dir.y;
+
+    // Va tường
+    if (nx < 0 || ny < 0 || nx >= COLS || ny >= ROWS) return gameOver();
+    // Tự cắn (bỏ qua đuôi vì nó sẽ rời đi — trừ khi vừa ăn)
+    const willGrow = food && nx === food.x && ny === food.y;
+    const body = willGrow ? snake : snake.slice(0, -1);
+    if (body.some(s => s.x === nx && s.y === ny)) return gameOver();
+
+    snake.unshift({ x: nx, y: ny });
+
+    if (willGrow) {
+      score++;
+      speed = Math.min(MAX_SPEED, speed + SPEED_STEP);
+      if (score > best) {
+        best = score;
+        localStorage.setItem('snake_best', String(best));
+      }
+      burst(food.x, food.y);
+      sfx.eat();
+      eatFlash = 1;
+      food = spawnFood();
+    } else {
+      snake.pop();
+    }
+    updateHUD();
+  }
+
+  function gameOver() {
+    alive = false;
+    sfx.die();
+    statusText.textContent = 'KẾT THÚC';
+    showOverlay('GAME OVER', `Điểm ${score} · Kỷ lục ${best}`, '↻ Chơi lại');
+  }
+
+  // ---------- Hiệu ứng ----------
+  function burst(cx, cy) {
+    const px = cx * CELL + CELL / 2;
+    const py = cy * CELL + CELL / 2;
+    for (let i = 0; i < 18; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const sp = 1 + Math.random() * 3;
+      particles.push({
+        x: px, y: py,
+        vx: Math.cos(a) * sp,
+        vy: Math.sin(a) * sp,
+        life: 1,
+        size: 2 + Math.random() * 3,
+        color: Math.random() < 0.5 ? COLORS.food : COLORS.foodCore,
+      });
+    }
+  }
+
+  function updateParticles(dt) {
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vx *= 0.92;
+      p.vy *= 0.92;
+      p.life -= dt * 1.8;
+      if (p.life <= 0) particles.splice(i, 1);
+    }
+  }
+
+  // ---------- Vẽ ----------
+  function roundRect(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+
+  function drawFood(time) {
+    if (!food) return;
+    const cx = food.x * CELL + CELL / 2;
+    const cy = food.y * CELL + CELL / 2;
+    const pulse = 1 + Math.sin(time / 200) * 0.12;
+
+    // glow
+    const g = ctx.createRadialGradient(cx, cy, 2, cx, cy, CELL * 1.1);
+    g.addColorStop(0, 'rgba(232,92,106,0.55)');
+    g.addColorStop(1, 'rgba(232,92,106,0)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cx, cy, CELL * 1.1 * pulse, 0, Math.PI * 2);
+    ctx.fill();
+
+    // body
+    ctx.fillStyle = COLORS.food;
+    ctx.beginPath();
+    ctx.arc(cx, cy, (CELL / 2 - 3) * pulse, 0, Math.PI * 2);
+    ctx.fill();
+
+    // highlight
+    ctx.fillStyle = COLORS.foodCore;
+    ctx.beginPath();
+    ctx.arc(cx - 3, cy - 4, 2.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function drawSnake() {
+    for (let i = snake.length - 1; i >= 0; i--) {
+      const s = snake[i];
+      const x = s.x * CELL;
+      const y = s.y * CELL;
+      const t = i / snake.length;
+
+      if (i === 0) {
+        // đầu
+        ctx.fillStyle = COLORS.head;
+        roundRect(x + 2, y + 2, CELL - 4, CELL - 4, 8);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.25)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+
+        // mắt nhìn theo hướng
+        const ex = x + CELL / 2 + dir.x * 4;
+        const ey = y + CELL / 2 + dir.y * 4;
+        const offX = -dir.y * 4;
+        const offY = dir.x * 4;
+        ctx.fillStyle = COLORS.eye;
+        ctx.beginPath();
+        ctx.arc(ex + offX, ey + offY, 2.2, 0, Math.PI * 2);
+        ctx.arc(ex - offX, ey - offY, 2.2, 0, Math.PI * 2);
+        ctx.fill();
+      } else {
+        const shrink = 2 + t * 4;
+        const r = 7 - t * 3;
+        const col = lerpColor(COLORS.body, COLORS.tail, t);
+        ctx.fillStyle = col;
+        roundRect(x + shrink, y + shrink, CELL - shrink * 2, CELL - shrink * 2, r);
+        ctx.fill();
+      }
+    }
+  }
+
+  function lerpColor(a, b, t) {
+    const pa = hexToRgb(a), pb = hexToRgb(b);
+    const r = Math.round(pa[0] + (pb[0] - pa[0]) * t);
+    const g = Math.round(pa[1] + (pb[1] - pa[1]) * t);
+    const bl = Math.round(pa[2] + (pb[2] - pa[2]) * t);
+    return `rgb(${r},${g},${bl})`;
+  }
+  function hexToRgb(h) {
+    const n = parseInt(h.slice(1), 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  }
+
+  function drawParticles() {
+    for (const p of particles) {
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // flash khi ăn
+    if (eatFlash > 0) {
+      ctx.fillStyle = `rgba(255,255,255,${eatFlash * 0.15})`;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      eatFlash *= 0.85;
+      if (eatFlash < 0.02) eatFlash = 0;
+    }
+
+    drawFood(performance.now());
+    drawSnake();
+    drawParticles();
+  }
+
+  function loop(time) {
+    if (!lastTime) lastTime = time;
+    const dt = Math.min(0.05, (time - lastTime) / 1000);
+    lastTime = time;
+
+    if (started && alive && !paused) {
+      stepAcc += dt;
+      const interval = 1 / speed;
+      while (stepAcc >= interval) {
+        stepAcc -= interval;
+        step();
+        if (!alive) break;
+      }
+      updateParticles(dt);
+    } else {
+      updateParticles(dt);
+    }
+
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  // ---------- Overlay & nút ----------
+  function showOverlay(title, sub, btn) {
+    overlayTitle.textContent = title;
+    overlaySub.textContent = sub;
+    startBtn.textContent = btn || '▶ Bắt đầu';
+    overlay.classList.remove('hidden');
+    overlay.querySelector(':scope > div').classList.remove('float-in');
+    void overlay.offsetWidth; // reflow
+    overlay.querySelector(':scope > div').classList.add('float-in');
+  }
+  function hideOverlay() { overlay.classList.add('hidden'); }
+
+  function beginGame() {
+    ensureAudio();
+    reset();
+    started = true;
+    hideOverlay();
+    statusText.textContent = 'ĐANG CHƠI';
+    pauseBtn.textContent = '⏸ Tạm dừng';
+    sfx.start();
+  }
+
+  function togglePause() {
+    if (!alive) return;
+    paused = !paused;
+    if (paused) {
+      statusText.textContent = 'TẠM DỪNG';
+      showOverlay('TẠM DỪNG', 'Nhấn Space hoặc nút dưới để tiếp tục', '▶ Tiếp tục');
+      pauseBtn.textContent = '▶ Tiếp tục';
+    } else {
+      statusText.textContent = 'ĐANG CHƠI';
+      hideOverlay();
+      pauseBtn.textContent = '⏸ Tạm dừng';
+    }
+  }
+
+  startBtn.addEventListener('click', () => {
+    if (paused && alive) togglePause();
+    else beginGame();
+  });
+  pauseBtn.addEventListener('click', () => {
+    if (!started) beginGame();
+    else togglePause();
+  });
+  restartBtn.addEventListener('click', beginGame);
+  soundBtn.addEventListener('click', () => {
+    soundOn = !soundOn;
+    soundBtn.textContent = soundOn ? '🔊' : '🔇';
+    if (soundOn) beep(660, 0.05, 'sine', 0.05);
+  });
+
+  // ---------- Khởi động ----------
+  reset();
+  started = false;
+  showOverlay('SẴN SÀNG?', 'Dùng phím mũi tên hoặc WASD · Space để tạm dừng', '▶ Bắt đầu');
+  requestAnimationFrame(loop);
+
+  // Hook dành cho kiểm thử tự động (không ảnh hưởng gameplay)
+  if (typeof window !== 'undefined') {
+    window.__snake = {
+      reset, step, setDir, spawnFood,
+      get state() { return { snake, dir, nextDir, food, score, best, speed, alive, paused, started }; },
+      set food(f) { food = f; },
+      set snake(s) { snake = s; },
+      set dir(d) { dir = d; nextDir = d; },
+    };
+  }
+})();
+</script>
+</body>
+</html>
